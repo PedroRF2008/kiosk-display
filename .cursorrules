@@ -1,0 +1,44 @@
+We are building a kiosk system that will display different contents of information. Here is how the structure of the project will work:
+
+INFRASTRUCTURE:
+- The kiosk will be deployed on a Raspberry Pi 4
+- The Raspberry Pi will be headless and connected to the internet wirelessly
+- There will be multiple kiosks deployed in different locations
+- The kiosks will be connected to the same network
+- There will be kiosk groups, each group will have a different set of contents to display
+- The kiosks will not be accessible from the internet, only from the local network
+- Make sure to have all the interfaces texts in brazilian portuguese
+
+DATA ARCHITECTURE:
+- Firebase Firestore will be the primary database for all content and configuration
+- Firebase Storage will handle media file storage
+- Each kiosk will maintain a local cache (using diskcache) for:
+  - Temporary storage of downloaded media
+  - Offline fallback content
+  - Performance optimization
+- Real-time synchronization will be handled through Firebase listeners
+- Cloud Functions will manage content processing and distribution
+
+ADMIN PANEL:
+- Web application deployed on Vercel
+- Built with Next.js, TailwindCSS, and NextUI components. Icons with Iconify
+- Authentication via Firebase Google OAuth
+- Features:
+  - Create, edit and delete kiosk groups
+  - Create, edit and delete kiosks
+  - Create, edit and delete contents groups
+  - Monitor kiosk status and connectivity
+  - Manage content distribution
+
+KIOSK CLIENT:
+- Python-based display application
+- Firebase Admin SDK for secure communication
+- Local caching for offline operation
+- Automatic content synchronization
+- Real-time updates through Firebase listeners
+
+SECURITY:
+- Kiosks authenticate with Firebase using service accounts
+- Admin panel uses Firebase Authentication
+- All communication encrypted through Firebase
+- Local network restriction for kiosk displays

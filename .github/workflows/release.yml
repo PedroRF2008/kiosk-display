@@ -1,0 +1,70 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+          
+      - name: Create Release ZIP
+        run: |
+          # Remove unnecessary files
+          rm -rf .git .github __pycache__ *.pyc
+          rm -f .gitignore
+          
+          # Create temporary directory for release
+          mkdir release
+          
+          # Copy display contents (not the folder itself)
+          cp -r display/* release/
+          
+          # Create zip from contents
+          VERSION=${GITHUB_REF#refs/tags/}
+          cd release && zip -r "../kiosk-${VERSION}.zip" .
+          cd ..
+
+      - name: Generate SHA256
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          sha256sum "kiosk-${VERSION}.zip" > checksum.txt
+          
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./kiosk-${{ github.ref_name }}.zip
+          asset_name: kiosk-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
+          
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./checksum.txt
+          asset_name: checksum.txt
+          asset_content_type: text/plain
