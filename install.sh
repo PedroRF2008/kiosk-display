@@ -115,18 +115,22 @@ wget -O "${LOGO_PATH}" "${LOGO_URL}"
 # Ensure pcmanfm is installed (default file manager in Raspberry Pi OS that handles desktop)
 apt-get install -y pcmanfm
 
-# Set the background wallpaper
-su - kiosk -c "pcmanfm --set-wallpaper ${BACKGROUND_PATH}"
+# Set the background wallpaper - Modified to check for display
+if [ -n "$DISPLAY" ]; then
+    su - kiosk -c "pcmanfm --set-wallpaper ${BACKGROUND_PATH}"
+else
+    echo "[INSTALL] Warning: No display available. Wallpaper will be set on next boot."
+fi
 
 # Create autostart directory if it doesn't exist
 mkdir -p /home/kiosk/.config/autostart
 
-# Create desktop entry to set wallpaper on boot
+# Modified desktop entry to be more robust
 cat > /home/kiosk/.config/autostart/wallpaper.desktop << EOL
 [Desktop Entry]
 Type=Application
 Name=Set Wallpaper
-Exec=pcmanfm --set-wallpaper ${BACKGROUND_PATH}
+Exec=bash -c 'sleep 5 && pcmanfm --set-wallpaper "${BACKGROUND_PATH}"'
 Hidden=false
 X-GNOME-Autostart-enabled=true
 EOL
