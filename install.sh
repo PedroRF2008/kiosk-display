@@ -12,7 +12,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Variables
-KIOSK_ROOT="/home/pedro/kiosk"
+KIOSK_ROOT="/home/kiosk/kiosk"
 DISPLAY_DIR="${KIOSK_ROOT}/display"
 GITHUB_REPO="PedroRF2008/kiosk-display"
 
@@ -116,13 +116,13 @@ wget -O "${LOGO_PATH}" "${LOGO_URL}"
 apt-get install -y pcmanfm
 
 # Set the background wallpaper
-su - pedro -c "pcmanfm --set-wallpaper ${BACKGROUND_PATH}"
+su - kiosk -c "pcmanfm --set-wallpaper ${BACKGROUND_PATH}"
 
 # Create autostart directory if it doesn't exist
-mkdir -p /home/pedro/.config/autostart
+mkdir -p /home/kiosk/.config/autostart
 
 # Create desktop entry to set wallpaper on boot
-cat > /home/pedro/.config/autostart/wallpaper.desktop << EOL
+cat > /home/kiosk/.config/autostart/wallpaper.desktop << EOL
 [Desktop Entry]
 Type=Application
 Name=Set Wallpaper
@@ -132,14 +132,14 @@ X-GNOME-Autostart-enabled=true
 EOL
 
 # Set proper ownership
-chown -R pedro:pedro /home/pedro/.config/autostart
+chown -R kiosk:kiosk /home/kiosk/.config/autostart
 
 echo "[INSTALL] Setting up systemd service..."
 cp "${DISPLAY_DIR}/kiosk.service" /etc/systemd/system/
 chmod 644 /etc/systemd/system/kiosk.service
 
 echo "[INSTALL] Setting permissions..."
-chown -R pedro:pedro "${KIOSK_ROOT}"
+chown -R kiosk:kiosk "${KIOSK_ROOT}"
 chmod +x "${DISPLAY_DIR}/start_kiosk.sh"
 
 echo "[INSTALL] Starting kiosk service..."
@@ -151,11 +151,11 @@ rm /tmp/kiosk.zip
 
 echo "[INSTALL] Setting up D-Bus directories..."
 mkdir -p /run/user/1000
-chown pedro:pedro /run/user/1000
+chown kiosk:kiosk /run/user/1000
 chmod 700 /run/user/1000
 
 # Ensure D-Bus is running for the user
-loginctl enable-linger pedro
+loginctl enable-linger kiosk
 
 echo "[INSTALL] Setting up custom boot splash..."
 

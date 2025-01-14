@@ -5,11 +5,11 @@ Wants=graphical.target
 
 [Service]
 Type=simple
-User=pedro
+User=kiosk
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/pedro/.Xauthority
-WorkingDirectory=/home/pedro/kiosk/display
-ExecStart=/bin/bash /home/pedro/kiosk/display/start_kiosk.sh
+Environment=XAUTHORITY=/home/kiosk/.Xauthority
+WorkingDirectory=/home/kiosk/kiosk/display
+ExecStart=/bin/bash /home/kiosk/kiosk/display/start_kiosk.sh
 Restart=always
 RestartSec=10
 

@@ -66,9 +66,9 @@ check_updates() {
     
     # Download update
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v${LATEST_VERSION}/kiosk-v${LATEST_VERSION}.zip"
-    UPDATE_DIR="/home/pedro/kiosk/updates"
-    TEMP_DIR="/home/pedro/kiosk/updates/temp"
-    KIOSK_ROOT="/home/pedro/kiosk"
+    UPDATE_DIR="/home/kiosk/kiosk/updates"
+    TEMP_DIR="/home/kiosk/kiosk/updates/temp"
+    KIOSK_ROOT="/home/kiosk/kiosk"
     
     show_progress "Baixando atualização..."
     echo "[UPDATE] Creating update directory: ${UPDATE_DIR}"
@@ -93,13 +93,13 @@ check_updates() {
     
     # Clean up old version and move new version into place
     echo "[UPDATE] Updating display directory..."
-    sudo rm -rf "/home/pedro/kiosk/display"
-    sudo mv "${TEMP_DIR}" "/home/pedro/kiosk/display"
+    sudo rm -rf "/home/kiosk/kiosk/display"
+    sudo mv "${TEMP_DIR}" "/home/kiosk/kiosk/display"
     sudo rm -f "${UPDATE_DIR}/update.zip"
     
     # Fix permissions after moving files
-    sudo chown -R pedro:pedro "/home/pedro/kiosk/display"
-    sudo chmod -R 755 "/home/pedro/kiosk/display"
+    sudo chown -R kiosk:kiosk "/home/kiosk/kiosk/display"
+    sudo chmod -R 755 "/home/kiosk/kiosk/display"
     
     # Reload systemd and restart service
     echo "[UPDATE] Reloading systemd and restarting service..."
@@ -125,7 +125,7 @@ echo "[STARTUP] Starting kiosk application..."
 
 # Get the script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-KIOSK_ROOT="/home/pedro/kiosk"
+KIOSK_ROOT="/home/kiosk/kiosk"
 
 # Kill any existing browser instances
 pkill -f chromium
