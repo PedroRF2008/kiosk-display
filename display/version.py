@@ -1,1 +1,1 @@
-VERSION = "0.3.1"  # Following semantic versioning
+VERSION = "1.0.0"  # Following semantic versioning
