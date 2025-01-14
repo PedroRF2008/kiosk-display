@@ -111,7 +111,7 @@ LOGO_PATH="${KIOSK_ROOT}/static/display/logo.png"
 # Create directory if it doesn't exist and download the logo
 mkdir -p "${KIOSK_ROOT}/static/display"
 wget -O "${LOGO_PATH}" "${LOGO_URL}"
-~~
+
 # Ensure pcmanfm is installed (default file manager in Raspberry Pi OS that handles desktop)
 apt-get install -y pcmanfm
 
