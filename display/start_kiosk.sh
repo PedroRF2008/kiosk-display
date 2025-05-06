@@ -126,16 +126,22 @@ echo "[STARTUP] Starting kiosk application..."
 # Get the script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 KIOSK_ROOT="/home/kiosk/kiosk"
+CHROMIUM_CACHE_DIR="/tmp/chromium_kiosk_cache"
+
+# Create cache directory if it doesn't exist and ensure kiosk user owns it
+mkdir -p "${CHROMIUM_CACHE_DIR}"
+chown kiosk:kiosk "${CHROMIUM_CACHE_DIR}"
 
 # Kill any existing browser instances
 pkill -f chromium
 pkill -f unclutter
 
 # Wait a moment for X to be ready
-sleep 2
+sleep 3 # Increased sleep time
 
 # Start unclutter with simpler settings (this worked before)
-unclutter -idle 0.1 -root &
+# Run unclutter in the background after a small delay
+(sleep 2 && unclutter -idle 0.1 -root) &
 
 # Activate virtual environment and start Flask app
 cd "$SCRIPT_DIR"
@@ -152,10 +158,9 @@ DISPLAY=:0 chromium-browser \
     --disable-translate \
     --disable-features=TranslateUI \
     --enable-gpu \
-    --ignore-gpu-blocklist \
     --enable-hardware-acceleration \
-    --disk-cache-dir=/dev/null \
-    --disk-cache-size=1 \
+    --disk-cache-dir="${CHROMIUM_CACHE_DIR}" \
+    --disk-cache-size=10485760 \
     --remote-debugging-port=9222 \
     --remote-allow-origins=http://localhost:9222 \
     --autoplay-policy=no-user-gesture-required \

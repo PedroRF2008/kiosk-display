@@ -1445,114 +1445,168 @@ def signage_display():
             document.head.appendChild(style);
 
             function showSlide(index) {
-                if (isTransitioning) {
-                    log('Transition already in progress, ignoring showSlide call');
+                log(`Attempting to show slide: ${index}. Current global slide index: ${currentSlide}. Total slides: ${slides.length}. isTransitioning: ${isTransitioning}`);
+                if (isTransitioning && slides[index] !== slides[currentSlide]) { // Allow re-trigger for same slide if needed, but block new transitions
+                    log('Transition already in progress for a different slide, ignoring showSlide call for new slide: ' + index);
                     return;
                 }
 
                 isTransitioning = true;
-                log(`Starting transition to slide ${index}`);
+                log(`Starting transition TO slide ${index}. Setting isTransitioning = true.`);
 
                 // Clear any existing timers
                 if (slideTimer) {
-                    log('Clearing existing timer');
+                    log(`Clearing existing slideTimer for slide ${index}`);
                     clearTimeout(slideTimer);
                     slideTimer = null;
                 }
 
-                // Start fading out current slide
+                // Start fading out current active slide (if different from new slide)
                 slides.forEach((slide, i) => {
-                    if (slide.classList.contains('active')) {
+                    if (slide.classList.contains('active') && i !== index) {
+                        log(`Fading out currently active slide: ${i}`);
                         slide.classList.add('fade-out');
+                    } else if (slide.classList.contains('active') && i === index) {
+                        log(`Slide ${index} is already active. No fade out, will proceed to setup.`);
                     }
                 });
 
                 // Wait for fade out, then switch slides
                 setTimeout(() => {
-                    // Hide all slides and stop all videos
+                    log(`Fade-out period ended for slide ${index}. Setting isTransitioning = false before content setup.`);
+                    isTransitioning = false; 
+
+                    // Hide all slides and stop all videos, then activate the target slide
                     slides.forEach((slide, i) => {
-                        slide.classList.remove('active', 'fade-out');
+                        const isActiveTarget = (i === index);
+                        if (slide.classList.contains('active') && !isActiveTarget) {
+                            slide.classList.remove('active', 'fade-out');
+                            log(`Deactivated slide: ${i}`);
+                        }
                         const video = slide.querySelector('video');
-                        if (video) {
-                            log(`Stopping video on slide ${i}`);
+                        if (video && !isActiveTarget) { // Only stop videos on non-target slides
+                            log(`Stopping video on non-target slide ${i}`);
                             video.pause();
                             video.currentTime = 0;
                             video.onended = null;
                             video.ontimeupdate = null;
+                            video.onloadedmetadata = null;
+                            video.removeAttribute('data-transitioning-next');
                         }
                     });
 
                     // Show and setup current slide
                     const currentElement = slides[index];
+                    if (!currentElement) {
+                        log(`ERROR: currentElement for slide index ${index} is undefined! Total slides: ${slides.length}`);
+                        // Attempt to recover or bail
+                        if (slides.length > 0) {
+                             log(`ERROR: Attempting to recover by going to slide 0`);
+                             currentSlide = 0; // Reset to a known good state
+                             nextSlide(); // This will call showSlide(0)
+                        }
+                        return;
+                    }
+                    
+                    log(`Activating slide ${index}. Element: ${currentElement.tagName}`);
+                    currentElement.classList.remove('fade-out'); // Ensure it's not faded out if it was the same slide
                     currentElement.classList.add('active');
                     
                     const video = currentElement.querySelector('video');
                     if (video) {
-                        log(`Setting up video on slide ${index}`);
+                        log(`Setting up video on slide ${index}. Video src: ${video.src}`);
                         videoPlaying = true;
+                        video.dataset.transitioningNext = 'false';
 
-                        // Calculate when to start the transition
-                        const transitionPoint = video.duration - 1.2; // Start transition 1.2 seconds before end
+                        const handleVideoEnd = (reason) => {
+                            log(`handleVideoEnd called for slide: ${index} (src: ${video.src.split('/').pop()}) due to: ${reason}. Current global slide: ${currentSlide}. Video transitioningNext: ${video.dataset.transitioningNext}`);
+                            if (video.dataset.transitioningNext === 'true') {
+                                log(`Transition for video ${index} already triggered. Ignoring.`);
+                                return;
+                            }
+                            video.dataset.transitioningNext = 'true';
+                            log(`Set transitioningNext=true for video ${index}`);
 
-                        // Timeupdate handler for transition
-                        let timeUpdateCount = 0;
-                        let transitionStarted = false;
-                        video.ontimeupdate = () => {
-                            // Only log every 30 frames to avoid console spam
-                            if (timeUpdateCount++ % 30 === 0) {
-                                log(`Video progress: ${video.currentTime}/${video.duration}`);
+                            // Clear handlers and timer
+                            video.ontimeupdate = null;
+                            video.onended = null;
+                            video.onloadedmetadata = null;
+                            if (slideTimer) {
+                                log(`Clearing slideTimer in handleVideoEnd for slide ${index}`);
+                                clearTimeout(slideTimer);
+                                slideTimer = null;
                             }
                             
-                            // Start transition before video ends
-                            if (!transitionStarted && video.currentTime >= transitionPoint) {
-                                log(`Starting transition near video end on slide ${index}`);
-                                transitionStarted = true;
-                                nextSlide();
-                            }
+                            videoPlaying = false;
+                            nextSlide();
                         };
 
-                        // Safety timeout
-                        const maxDuration = (video.duration * 1000);
-                        log(`Setting safety timeout for ${maxDuration}ms`);
-                        slideTimer = setTimeout(() => {
-                            log(`Safety timeout triggered for slide ${index}`);
-                            if (!transitionStarted) {
-                                videoPlaying = false;
-                                nextSlide();
+                        video.onloadedmetadata = () => {
+                            log(`Video metadata loaded for slide ${index} (src: ${video.src.split('/').pop()}). Duration: ${video.duration}, readyState: ${video.readyState}`);
+                            if (slideTimer) {
+                                log(`Clearing pre-existing slideTimer in onloadedmetadata for slide ${index}`);
+                                clearTimeout(slideTimer);
+                                slideTimer = null;
                             }
-                        }, maxDuration);
-
-                        // Play the video
+                            
+                            const durationMs = video.duration * 1000;
+                            if (isFinite(durationMs) && durationMs > 0) {
+                                log(`Setting safety timeout for ${durationMs}ms for slide ${index}`);
+                                slideTimer = setTimeout(() => handleVideoEnd('safety_timeout'), durationMs);
+                            } else {
+                                log(`Invalid duration for video ${index}: ${video.duration}. Safety timeout not set or using fallback. Will rely on 'onended'.`);
+                            }
+                        };
+                        
+                        video.onended = () => handleVideoEnd('ended_event');
+                        video.onerror = (e) => {
+                            log(`ERROR on video element for slide ${index} (src: ${video.src.split('/').pop()}): ${JSON.stringify(e)} MediaError: ${JSON.stringify(video.error)}`);
+                            handleVideoEnd('video_element_error');
+                        };
+                        
+                        log(`Attempting to play video for slide ${index} (src: ${video.src.split('/').pop()})`);
                         video.play().then(() => {
-                            log(`Video started playing on slide ${index}`);
-                            isTransitioning = false;
+                            log(`Video started playing on slide ${index} (src: ${video.src.split('/').pop()}). Setting isTransitioning = false.`);
+                            isTransitioning = false; 
                         }).catch(error => {
-                            log(`Error playing video on slide ${index}: ${error}`);
-                            videoPlaying = false;
-                            isTransitioning = false;
-                            nextSlide();
+                            log(`Error playing video on slide ${index} (src: ${video.src.split('/').pop()}): ${error}. isTransitioning state: ${isTransitioning}`);
+                            handleVideoEnd('play_error');
                         });
-                    } else {
-                        log(`Setting up image on slide ${index}`);
+
+                        if (video.readyState >= 2 && isFinite(video.duration)) {
+                           log(`Video ${index} metadata already available on setup. Manually triggering onloadedmetadata.`);
+                           video.onloadedmetadata();
+                        } else {
+                            log(`Video ${index} metadata not yet available (readyState: ${video.readyState}, duration: ${video.duration}). Waiting for event.`);
+                        }
+
+                    } else { // Image slide
+                        log(`Setting up image on slide ${index}. Setting isTransitioning = false.`);
                         videoPlaying = false;
                         const duration = parseInt(currentElement.dataset.duration);
+                        if (slideTimer) { // Clear previous timer just in case
+                            log(`Clearing existing slideTimer for image slide ${index}`);
+                            clearTimeout(slideTimer);
+                        }
                         slideTimer = setTimeout(() => {
+                            log(`Image slide ${index} timer expired. Calling nextSlide.`);
                             nextSlide();
-                        }, Math.max(duration - 1000, 1000)); // Start transition 1 second before duration ends
+                        }, Math.max(duration - 1000, 1000)); 
                         isTransitioning = false;
                     }
-                }, 1000); // Wait for fade out animation
+                }, 1000); // Wait for fade out animation (1s)
             }
 
             function nextSlide() {
+                const oldSlide = currentSlide;
+                log(`nextSlide called. Old currentSlide: ${oldSlide}. isTransitioning: ${isTransitioning}`);
                 if (isTransitioning) {
-                    log('Transition already in progress, ignoring nextSlide call');
+                    log('Transition already in progress, ignoring nextSlide call from old slide ' + oldSlide);
                     return;
                 }
 
-                log('Starting nextSlide transition');
                 currentSlide = (currentSlide + 1) % slides.length;
-                log(`Moving to slide ${currentSlide}`);
+                log(`nextSlide: New currentSlide calculated: ${currentSlide}. Total slides: ${slides.length}. About to call showSlide(${currentSlide}).`);
                 showSlide(currentSlide);
             }
 

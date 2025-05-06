@@ -17,7 +17,7 @@ DISPLAY_DIR="${KIOSK_ROOT}/display"
 GITHUB_REPO="PedroRF2008/kiosk-display"
 
 echo "[INSTALL] Installing dependencies..."
-apt-get install -y chromium-browser x11-xserver-utils unclutter wget unzip curl zenity wireless-tools libaio1
+apt-get install -y chromium-browser x11-xserver-utils unclutter wget unzip curl zenity wireless-tools libaio1 fonts-noto-color-emoji
 
 echo "[INSTALL] Fetching latest version information..."
 KIOSK_VERSION=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
