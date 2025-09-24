@@ -1,10 +1,11 @@
 firebase-admin==6.2.0
 Flask==2.3.3
+Flask-CORS==4.0.0
 Pillow==10.0.0
 requests==2.31.0
 python-dotenv==1.0.0
 diskcache==5.6.1
-psutil==5.9.8 
+psutil==5.9.8
 flask-socketio==5.3.6
 eventlet==0.33.3
 websocket-client==1.6.1
