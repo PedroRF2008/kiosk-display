@@ -4,7 +4,8 @@
 
 import os
 import sqlite3
-from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify, Response
+from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify, Response, send_from_directory, send_file
+from flask_cors import CORS
 import requests
 from datetime import datetime
 from PIL import Image
@@ -27,13 +28,15 @@ import logging
 os.environ["NLS_LANG"] = "AMERICAN_AMERICA.AL32UTF8"
 
 # Constants
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATIC_DIR = os.path.join(ROOT_DIR, "static")
+DISPLAY_DIR = os.path.dirname(os.path.abspath(__file__))  # This is the display directory
+PROJECT_ROOT = os.path.dirname(DISPLAY_DIR)  # This is the project root
+STATIC_DIR = os.path.join(PROJECT_ROOT, "static")  # Static files are in project root
+DISPLAY_STATIC_DIR = os.path.join(DISPLAY_DIR, "static")  # React build is in display/static
 MEDIA_FOLDER = os.path.join(STATIC_DIR, "media")
-CACHE_DIR = os.path.join(ROOT_DIR, "cache")
-UPDATES_DIR = os.path.join(ROOT_DIR, "updates")
+CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
+UPDATES_DIR = os.path.join(PROJECT_ROOT, "updates")
 UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
-DB_FILE = os.path.join(ROOT_DIR, "data", "kiosk.db")
+DB_FILE = os.path.join(PROJECT_ROOT, "data", "kiosk.db")
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'webm', 'mov'}
 
 # Create necessary directories
@@ -71,6 +74,9 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
 app.config['PROPAGATE_EXCEPTIONS'] = True
 logging.basicConfig(level=logging.INFO)
 app.logger.setLevel(logging.INFO)
+
+# Enable CORS for development
+CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
 
 # Force output to be flushed immediately
 
@@ -382,7 +388,7 @@ def login():
         # Very basic password check. You can store hashed pass in DB
         if request.form.get("password") == "admin123":
             session["logged_in"] = True
-            return redirect(url_for("admin_home"))
+            return redirect("/admin")
         else:
             return "Invalid password", 403
     return '''
@@ -400,7 +406,7 @@ def logout():
 ########################
 # ADMIN INTERFACE
 ########################
-@app.route("/admin")
+@app.route("/admin/legacy")
 def admin_home():
     if not check_login():
         return redirect(url_for("login"))
@@ -874,18 +880,21 @@ def admin_birthdays_delete(bd_id):
 
 @app.route("/")
 def signage_display():
-    """Main page to display the rotating info"""
-    print("\n=== Starting Signage Display Route ===")
-    
-    # Get weather info from OpenWeatherMap
-    weather = get_weather_info()
-    print(f"Weather info retrieved: {'Success' if weather else 'Failed'}")
-    
-    # Get group data from Firebase
-    current_group = cache_manager.get_cached_group()
-    print(f"Current group retrieved: {'Success' if current_group else 'None'}")
-    
-    if not current_group:
+    """Main page - serve React app or fallback to data display"""
+    # Check if React build exists
+    react_build_path = os.path.join(DISPLAY_STATIC_DIR, "build", "index.html")
+
+    if os.path.exists(react_build_path):
+        print("Serving React build for main display")
+        return send_from_directory(os.path.join(DISPLAY_STATIC_DIR, "build"), "index.html")
+
+    # Fallback to original HTML template for backward compatibility
+    print("\n=== Starting Signage Display Route (Legacy) ===")
+
+    # Get display data using shared function
+    weather, media_list, upcoming_birthdays, device_info, error = get_display_data()
+
+    if error:
         print("No group configured - returning error page")
         return render_template_string("""
             <html>
@@ -898,66 +907,9 @@ def signage_display():
             </html>
         """)
 
-    # Get upcoming birthdays
-    print("\nFetching upcoming birthdays...")
-    upcoming_birthdays = get_upcoming_birthdays()
+    print(f"Weather info retrieved: {'Success' if weather else 'Failed'}")
     print(f"Retrieved {len(upcoming_birthdays)} birthdays")
-    
-    media_list = current_group.get('media', [])
     print(f"Retrieved {len(media_list)} media items")
-    
-    # Map cloud media to local paths
-    for media in media_list:
-        content_type = media.get('type', 'image/jpeg')
-        
-        # Determine correct file extension based on content type
-        if content_type.startswith('video/') or content_type == 'video':
-            content_type_to_ext = {
-                'video/mp4': '.mp4',
-                'video/webm': '.webm',
-                'video/quicktime': '.mov',
-                'video': '.mp4'  # Default for generic video type
-            }
-            extension = content_type_to_ext.get(content_type, '.mp4')
-        else:
-            # For images, try to get extension from URL first, fallback to mime type
-            extension = os.path.splitext(media.get('url', ''))[1]
-            if not extension or extension == '.jpe':
-                extension = mimetypes.guess_extension(content_type) or '.jpg'
-                if extension == '.jpe':
-                    extension = '.jpg'
-        
-        local_path = os.path.join(MEDIA_FOLDER, f"{media['id']}{extension}")
-        media['local_path'] = f"/static/media/{media['id']}{extension}"
-        
-        # Handle duration based on media type
-        if content_type.startswith('video/') or content_type == 'video':
-            # For videos, set duration to -1 to indicate "play until end"
-            media['duration'] = -1
-            media['is_video'] = True
-        else:
-            # For images, use specified duration or default to 10 seconds
-            try:
-                duration = media.get('duration')
-                media['duration'] = int(duration) * 1000 if duration is not None else 10000
-            except (ValueError, TypeError):
-                media['duration'] = 10000  # Default to 10 seconds if invalid duration
-            media['is_video'] = False
-        
-        # Get dimensions if media exists locally
-        if os.path.exists(local_path):
-            try:
-                if content_type.startswith('image/'):
-                    with Image.open(local_path) as img:
-                        media['width'], media['height'] = img.size
-                elif content_type.startswith('video/') or content_type == 'video':
-                    # Default video dimensions for now
-                    media['width'] = 1920
-                    media['height'] = 1080
-            except Exception as e:
-                print(f"Error getting media dimensions: {str(e)}")
-                media['width'] = 1920
-                media['height'] = 1080
 
     html = """
     <!DOCTYPE html>
@@ -1633,6 +1585,26 @@ def signage_display():
                                 upcoming_birthdays=upcoming_birthdays,
                                 version=VERSION)
 
+# React build serving routes
+@app.route('/static/build/<path:filename>')
+def serve_react_build(filename):
+    """Serve React build static files"""
+    build_dir = os.path.join(DISPLAY_STATIC_DIR, "build")
+    return send_from_directory(build_dir, filename)
+
+@app.route('/admin')
+@app.route('/admin/<path:path>')
+def admin_react(path=''):
+    """Serve React app for admin routes"""
+    react_build_path = os.path.join(DISPLAY_STATIC_DIR, "build", "index.html")
+
+    if os.path.exists(react_build_path):
+        print("Serving React build for admin interface")
+        return send_from_directory(os.path.join(DISPLAY_STATIC_DIR, "build"), "index.html")
+
+    # Fallback to legacy admin route
+    return redirect('/admin/legacy')
+
 @app.route("/admin/settings", methods=["GET", "POST"])
 def admin_settings():
     if not check_login():
@@ -1699,6 +1671,228 @@ try:
     initialize_oracle()
 except Exception as e:
     print(f"Warning: Oracle initialization failed: {str(e)}")
+
+########################
+# API ROUTES
+########################
+
+def get_display_data():
+    """Extract display data logic for reuse in both HTML and API routes"""
+    # Get weather info from OpenWeatherMap
+    weather = get_weather_info()
+
+    # Get device info from device manager
+    device_info = None
+    if device_manager.device_doc:
+        device_info = {
+            'type': device_manager.device_doc.get('type', 'display_tv'),
+            'name': device_manager.device_doc.get('name', ''),
+            'description': device_manager.device_doc.get('description', ''),
+            'id': device_manager.device_doc.get('id', ''),
+        }
+
+    # Get group data from Firebase
+    current_group = cache_manager.get_cached_group()
+
+    if not current_group:
+        return None, None, None, device_info, "Device not configured"
+
+    # Get upcoming birthdays
+    upcoming_birthdays = get_upcoming_birthdays()
+
+    media_list = current_group.get('media', [])
+
+    # Map cloud media to local paths
+    for media in media_list:
+        content_type = media.get('type', 'image/jpeg')
+
+        # Determine correct file extension based on content type
+        if content_type.startswith('video/') or content_type == 'video':
+            content_type_to_ext = {
+                'video/mp4': '.mp4',
+                'video/webm': '.webm',
+                'video/quicktime': '.mov',
+                'video': '.mp4'  # Default for generic video type
+            }
+            extension = content_type_to_ext.get(content_type, '.mp4')
+        else:
+            # For images, try to get extension from URL first, fallback to mime type
+            extension = os.path.splitext(media.get('url', ''))[1]
+            if not extension or extension == '.jpe':
+                extension = mimetypes.guess_extension(content_type) or '.jpg'
+                if extension == '.jpe':
+                    extension = '.jpg'
+
+        local_path = os.path.join(MEDIA_FOLDER, f"{media['id']}{extension}")
+        media['local_path'] = f"/static/media/{media['id']}{extension}"
+
+        # Handle duration based on media type
+        if content_type.startswith('video/') or content_type == 'video':
+            # For videos, set duration to -1 to indicate "play until end"
+            media['duration'] = -1
+            media['is_video'] = True
+        else:
+            # For images, use specified duration or default to 10 seconds
+            try:
+                duration = media.get('duration')
+                media['duration'] = int(duration) * 1000 if duration is not None else 10000
+            except (ValueError, TypeError):
+                media['duration'] = 10000  # Default to 10 seconds if invalid duration
+            media['is_video'] = False
+
+        # Get dimensions if media exists locally
+        if os.path.exists(local_path):
+            try:
+                if content_type.startswith('image/'):
+                    with Image.open(local_path) as img:
+                        media['width'], media['height'] = img.size
+                elif content_type.startswith('video/') or content_type == 'video':
+                    # Default video dimensions for now
+                    media['width'] = 1920
+                    media['height'] = 1080
+            except Exception as e:
+                print(f"Error getting media dimensions: {str(e)}")
+                media['width'] = 1920
+                media['height'] = 1080
+
+    return weather, media_list, upcoming_birthdays, device_info, None
+
+@app.route("/api/v1/display")
+def api_display_data():
+    """API endpoint for main display data"""
+    weather, media_list, upcoming_birthdays, device_info, error = get_display_data()
+
+    if error:
+        return jsonify({
+            'error': error,
+            'configured': False,
+            'device': device_info
+        }), 400
+
+    return jsonify({
+        'weather': weather,
+        'media': media_list,
+        'birthdays': upcoming_birthdays,
+        'device': device_info,
+        'version': VERSION,
+        'configured': True
+    })
+
+@app.route("/api/v1/weather")
+def api_weather():
+    """API endpoint for weather data only"""
+    weather = get_weather_info()
+    return jsonify({'weather': weather})
+
+@app.route("/api/v1/birthdays")
+def api_birthdays():
+    """API endpoint for birthday data only"""
+    birthdays = get_upcoming_birthdays()
+    return jsonify({'birthdays': birthdays})
+
+@app.route("/api/v1/media")
+def api_media():
+    """API endpoint for media data only"""
+    current_group = cache_manager.get_cached_group()
+    if not current_group:
+        return jsonify({'error': 'Device not configured', 'media': []}), 400
+
+    media_list = current_group.get('media', [])
+
+    # Process media list (same logic as in get_display_data)
+    for media in media_list:
+        content_type = media.get('type', 'image/jpeg')
+
+        if content_type.startswith('video/') or content_type == 'video':
+            content_type_to_ext = {
+                'video/mp4': '.mp4',
+                'video/webm': '.webm',
+                'video/quicktime': '.mov',
+                'video': '.mp4'
+            }
+            extension = content_type_to_ext.get(content_type, '.mp4')
+        else:
+            extension = os.path.splitext(media.get('url', ''))[1]
+            if not extension or extension == '.jpe':
+                extension = mimetypes.guess_extension(content_type) or '.jpg'
+                if extension == '.jpe':
+                    extension = '.jpg'
+
+        local_path = os.path.join(MEDIA_FOLDER, f"{media['id']}{extension}")
+        media['local_path'] = f"/static/media/{media['id']}{extension}"
+
+        if content_type.startswith('video/') or content_type == 'video':
+            media['duration'] = -1
+            media['is_video'] = True
+        else:
+            try:
+                duration = media.get('duration')
+                media['duration'] = int(duration) * 1000 if duration is not None else 10000
+            except (ValueError, TypeError):
+                media['duration'] = 10000
+            media['is_video'] = False
+
+        if os.path.exists(local_path):
+            try:
+                if content_type.startswith('image/'):
+                    with Image.open(local_path) as img:
+                        media['width'], media['height'] = img.size
+                elif content_type.startswith('video/') or content_type == 'video':
+                    media['width'] = 1920
+                    media['height'] = 1080
+            except Exception as e:
+                print(f"Error getting media dimensions: {str(e)}")
+                media['width'] = 1920
+                media['height'] = 1080
+
+    return jsonify({'media': media_list})
+
+@app.route("/api/v1/admin/news", methods=["GET"])
+def api_admin_news():
+    """API endpoint for admin news data"""
+    if not check_login():
+        return jsonify({'error': 'Authentication required'}), 401
+
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, title, content, media_path, duration, created_at
+            FROM news
+            ORDER BY created_at DESC
+        """)
+        news_items = c.fetchall()
+
+    # Convert to list of dicts
+    news_list = []
+    for item in news_items:
+        news_list.append({
+            'id': item[0],
+            'title': item[1],
+            'content': item[2],
+            'media_path': item[3],
+            'duration': item[4],
+            'created_at': item[5]
+        })
+
+    return jsonify({'news': news_list})
+
+@app.route("/api/v1/admin/settings", methods=["GET"])
+def api_admin_settings():
+    """API endpoint for admin settings data"""
+    if not check_login():
+        return jsonify({'error': 'Authentication required'}), 401
+
+    # Get current settings from Firestore
+    settings_doc = db.collection('config').document('openWeather').get()
+    settings = settings_doc.to_dict() if settings_doc.exists else {}
+
+    return jsonify({
+        'weather': {
+            'apiKey': settings.get('apiKey', ''),
+            'location': settings.get('location', '')
+        }
+    })
+
 
 @app.route("/test/birthdays")
 def test_birthdays():

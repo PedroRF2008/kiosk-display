@@ -9,7 +9,6 @@
 *.so
 .Python
 env/
-build/
 develop-eggs/
 dist/
 downloads/
@@ -26,10 +25,7 @@ var/
 .venv/
 
 # Cache and media
-cache/
-static/media/*
-!static/display/
-
+static/media
 # Database
 *.db
 *.sqlite3
@@ -46,3 +42,4 @@ static/media/*
 # OS
 .DS_Store
 Thumbs.db 
+display/frontend/node_modules/
